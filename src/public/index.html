@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HLS Video Player with Plyr</title>
+
+    <!-- Plyr CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.css"
+    />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 20px;
+        background: #f0f0f0;
+      }
+      .player-wrapper {
+        max-width: 800px;
+        margin: 0 auto;
+        position: relative;
+      }
+      /* Loader Spinner */
+      #loader {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: none;
+        z-index: 10;
+      }
+      .spinner {
+        border: 6px solid #f3f3f3;
+        border-top: 6px solid #3498db;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>HLS Video Player (Plyr)</h1>
+    <div class="player-wrapper">
+      <video id="player" controls crossorigin playsinline></video>
+      <div id="loader"><div class="spinner"></div></div>
+    </div>
+
+    <!-- hls.js & Plyr JS -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plyr@3/dist/plyr.polyfilled.js"></script>
+
+    <script>
+      const video = document.getElementById("player");
+      const loader = document.getElementById("loader");
+      const videoSrc = "hls/yt/master.m3u8";
+
+      if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(videoSrc);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          console.log("HLS manifest loaded");
+          video.play().catch(() => {});
+
+          // Extract available quality heights
+          const levels = hls.levels.map((l) => l.height).sort((a, b) => a - b);
+          const uniqueLevels = [...new Set(levels)]; // remove duplicates
+          const qualityOptions = [-1, ...uniqueLevels]; // -1 = Auto
+
+          // Initialize Plyr
+          const player = new Plyr(video, {
+            controls: [
+              "play-large",
+              "play",
+              "progress",
+              "current-time",
+              "mute",
+              "volume",
+              "settings",
+              "fullscreen",
+            ],
+            settings: ["quality"],
+            quality: {
+              default: -1,
+              options: qualityOptions,
+              forced: true,
+              onChange: (newQuality) => {
+                loader.style.display = "block"; // show spinner
+
+                if (newQuality === -1) {
+                  hls.currentLevel = -1; // Auto
+                } else {
+                  const levelIndex = hls.levels.findIndex(
+                    (l) => l.height === newQuality,
+                  );
+                  hls.currentLevel = levelIndex;
+                }
+
+                // Wait until the new level is loaded
+                hls.once(Hls.Events.LEVEL_SWITCHED, () => {
+                  loader.style.display = "none"; // hide spinner
+                  console.log(
+                    "Switched quality to",
+                    newQuality === -1 ? "Auto" : newQuality + "p",
+                  );
+                });
+              },
+            },
+          });
+        });
+
+        hls.on(Hls.Events.ERROR, (event, data) => {
+          console.error("HLS error:", data);
+        });
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // Native HLS support (Safari, iOS)
+        video.src = videoSrc;
+        video.addEventListener("loadedmetadata", () => video.play());
+        const player = new Plyr(video);
+      }
+    </script>
+  </body>
+</html>

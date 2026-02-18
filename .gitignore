@@ -1,0 +1,4 @@
+node_modules
+dist
+uploads
+/src/public/hls_output/
