@@ -1,4 +1,4 @@
-import fs, { read, write } from "fs";
+import fs from "fs";
 import ffmpeg from "fluent-ffmpeg";
 import path from "path";
 interface HLSInterface {
@@ -6,64 +6,67 @@ interface HLSInterface {
   input_path: string;
 }
 const generateHLSOutput = async ({
-  outdir = "./public/hls_output",
   input_path,
+  outdir = "./public/hls_output",
 }: HLSInterface) => {
   const baseName = path.parse(input_path).name;
   const fileDir = path.join(outdir, baseName);
+  if (!fs.existsSync(fileDir)) fs.mkdirSync(fileDir, { recursive: true });
+
+  const resolutions = [
+    {
+      name: "360p",
+      size: "640x360",
+      videoBitrate: "800k",
+      audioBitrate: "128k",
+    },
+    {
+      name: "480p",
+      size: "854x480",
+      videoBitrate: "1200k",
+      audioBitrate: "128k",
+    },
+    {
+      name: "720p",
+      size: "1280x720",
+      videoBitrate: "2500k",
+      audioBitrate: "128k",
+    },
+    {
+      name: "1080p",
+      size: "1920x1080",
+      videoBitrate: "5000k",
+      audioBitrate: "192k",
+    },
+  ];
+
+  for (const res of resolutions) {
+    await new Promise((resolve, reject) => {
+      ffmpeg(input_path)
+        .output(path.join(fileDir, `${res.name}.m3u8`))
+        .videoCodec("libx264")
+        .size(res.size)
+        .videoBitrate(res.videoBitrate)
+        .audioCodec("aac")
+        .audioBitrate(res.audioBitrate)
+        .format("hls")
+        .outputOptions(["-hls_time 6", "-hls_playlist_type vod"])
+        .on("end", () => resolve(null))
+        .on("error", reject)
+        .run();
+    });
+  }
+
+  // Copy master playlist
   await new Promise((resolve, reject) => {
-    if (!fs.existsSync(fileDir)) {
-      fs.mkdirSync(fileDir, { recursive: true });
-    }
-    ffmpeg(input_path)
-      .output(`${fileDir}/360p.m3u8`)
-      .videoCodec("libx264")
-      .size("640x360")
-      .videoBitrate("800k")
-      .audioCodec("aac")
-      .audioBitrate("128k")
-      .format("hls")
-      .outputOptions(["-hls_time 6", "-hls_playlist_type vod"])
-      .output(`${fileDir}/480p.m3u8`)
-      .videoCodec("libx264")
-      .size("854x480")
-      .videoBitrate("1200k")
-      .audioCodec("aac")
-      .audioBitrate("128k")
-      .format("hls")
-      .outputOptions(["-hls_time 6", "-hls_playlist_type vod"])
-
-      .output(`${fileDir}/720p.m3u8`)
-      .videoCodec("libx264")
-      .size("1280x720")
-      .videoBitrate("2500k")
-      .audioCodec("aac")
-      .audioBitrate("128k")
-      .format("hls")
-      .outputOptions(["-hls_time 6", "-hls_playlist_type vod"])
-
-      .output(`${fileDir}/1080p.m3u8`)
-      .videoCodec("libx264")
-      .size("1920x1080")
-      .videoBitrate("5000k")
-      .audioCodec("aac")
-      .audioBitrate("192k")
-      .format("hls")
-      .outputOptions(["-hls_time 6", "-hls_playlist_type vod"])
-
-      .on("end", () => {
-        console.log("HLS converted");
-        const readStream = fs.createReadStream(`./public/masterm3u8demo.txt`);
-        const writeStream = fs.createWriteStream(`${fileDir}/master.m3u8`);
-        readStream.pipe(writeStream);
-        resolve("completed the HLS Generation");
-      })
-      .on("error", (err) => {
-        console.log("HLS conversion Failed");
-        reject(err);
-      })
-      .run();
+    const readStream = fs.createReadStream("./public/masterm3u8demo.txt");
+    const writeStream = fs.createWriteStream(`${fileDir}/master.m3u8`);
+    readStream.pipe(writeStream);
+    writeStream.on("finish", resolve);
+    writeStream.on("error", reject);
   });
+
+  console.log("HLS Generation Completed");
 };
 
 export default generateHLSOutput;

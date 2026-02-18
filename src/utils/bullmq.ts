@@ -1,4 +1,5 @@
 import { Job, Queue, Worker } from "bullmq";
+import generateHLSOutput from "./ffmpeg.js";
 
 export default class BullMQService {
   private queue: Queue;
@@ -15,15 +16,8 @@ export default class BullMQService {
     this.worker = new Worker(
       queue_name,
       async (job: Job) => {
-        console.log("Received job:", job.data);
-        if (job.data.shouldFail) {
-          throw new Error("Failed");
-        }
-
-        for (let i = 0; i <= 100; i += 10) {
-          await new Promise((r) => setTimeout(r, 200));
-          job.updateProgress(i);
-        }
+        const { file_location } = job.data;
+        await generateHLSOutput({ input_path: file_location });
       },
       {
         connection,
