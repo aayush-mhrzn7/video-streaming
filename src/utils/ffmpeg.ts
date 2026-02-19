@@ -7,7 +7,7 @@ interface HLSInterface {
 }
 const generateHLSOutput = async ({
   input_path,
-  outdir = "./public/hls_output",
+  outdir = "./src/public/hls_output",
 }: HLSInterface) => {
   const baseName = path.parse(input_path).name;
   const fileDir = path.join(outdir, baseName);
@@ -57,9 +57,8 @@ const generateHLSOutput = async ({
     });
   }
 
-  // Copy master playlist
   await new Promise((resolve, reject) => {
-    const readStream = fs.createReadStream("./public/masterm3u8demo.txt");
+    const readStream = fs.createReadStream("./src/public/masterm3u8demo.txt");
     const writeStream = fs.createWriteStream(`${fileDir}/master.m3u8`);
     readStream.pipe(writeStream);
     writeStream.on("finish", resolve);

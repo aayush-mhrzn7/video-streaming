@@ -18,14 +18,12 @@ app.get("/upload", (_, res) => {
   res.sendFile(path.join(__dirname, "./public/upload.html"));
 });
 app.post("/upload", upload.single("file"), (req, res) => {
-  console.log(req.file);
   const file = req.file;
   if (!file) {
     return res.json({ message: "File is required" });
   }
   const file_location = path.join(__dirname, "..", file.path);
 
-  console.log(file_location, "file location");
   bullMqService.addToQueue({ file_location: file.path });
 
   res.json({ message: "ok" });
