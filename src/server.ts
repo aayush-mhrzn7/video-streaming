@@ -25,7 +25,12 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     return res.json({ message: "File is required" });
   }
   const job = await bullMqService.addToQueue({ file_location: file.path });
-  bullMqService.getJobProgress(job.id as string, client_id);
+  if (!job.id) {
+    return res.status(500).json({ message: "failed to create a job" });
+  }
+  bullMqService.getJobProgress(job.id as string, client_id).catch((err) => {
+    console.log(err, "Failed to track the job progress");
+  });
   res.send({
     message: "job has been added to the queue",
   });

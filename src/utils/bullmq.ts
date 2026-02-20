@@ -60,17 +60,49 @@ export default class BullMQService {
 
   async getJobProgress(job_id: string, client_id: number) {
     const socket = websocketService.getSocket(client_id);
-    this.worker.on("progress", (job, progress) => {
-      console.log(`Job ${job.id} progress: ${progress}%`);
-      if (job_id === job.id) {
+
+    const progressHandler = (job: Job, progress: any) => {
+      if (job_id === job.id && socket) {
+        console.log(`Job ${job.id} progress: ${progress}%`);
         websocketService.sendMessage(socket, {
           type: "message",
-          payload: {
-            progress: progress,
-          },
+          payload: { progress },
         });
       }
-    });
+    };
+
+    const cleanup = () => {
+      this.worker.off("progress", progressHandler);
+      this.worker.off("completed", completedHandler);
+      this.worker.off("failed", failedHandler);
+      socket.off("close", cleanup);
+    };
+
+    const completedHandler = (job: Job) => {
+      if (job.id === job_id) {
+        cleanup();
+      }
+    };
+
+    const failedHandler = (job: Job | undefined) => {
+      if (job?.id === job_id) {
+        cleanup();
+      }
+    };
+
+    const job = await this.queue.getJob(job_id);
+    if (job) {
+      const currentProgress = job.progress;
+      websocketService.sendMessage(socket, {
+        type: "message",
+        payload: { progress: currentProgress },
+      });
+    }
+
+    this.worker.on("progress", progressHandler);
+    this.worker.on("completed", completedHandler);
+    this.worker.on("failed", failedHandler);
+    socket.on("close", cleanup);
   }
 }
 
