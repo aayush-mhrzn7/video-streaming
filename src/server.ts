@@ -4,6 +4,7 @@ import { fileURLToPath } from "url";
 import "dotenv/config";
 import upload from "./utils/multer.js";
 import { bullMqService } from "./utils/bullmq.js";
+import { websocketService } from "./utils/ws.js";
 
 const app = express();
 const port = Number(process.env.PORT);
@@ -17,16 +18,16 @@ app.get("/", (_, res) => {
 app.get("/upload", (_, res) => {
   res.sendFile(path.join(__dirname, "./public/upload.html"));
 });
-app.post("/upload", upload.single("file"), (req, res) => {
+app.post("/upload", upload.single("file"), async (req, res) => {
   const file = req.file;
   if (!file) {
     return res.json({ message: "File is required" });
   }
-  const file_location = path.join(__dirname, "..", file.path);
 
   bullMqService.addToQueue({ file_location: file.path });
-
-  res.json({ message: "ok" });
+  res.send({
+    message: "job has been added to the queue",
+  });
 });
 
 app.listen(port, () => {

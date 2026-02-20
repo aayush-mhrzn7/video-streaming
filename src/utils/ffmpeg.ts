@@ -1,13 +1,17 @@
 import fs from "fs";
 import ffmpeg from "fluent-ffmpeg";
 import path from "path";
+
 interface HLSInterface {
   outdir?: string;
   input_path: string;
+  onProgress?: (percent: number) => void;
 }
+
 const generateHLSOutput = async ({
   input_path,
   outdir = "./src/public/hls_output",
+  onProgress,
 }: HLSInterface) => {
   const baseName = path.parse(input_path).name;
   const fileDir = path.join(outdir, baseName);
@@ -40,7 +44,11 @@ const generateHLSOutput = async ({
     },
   ];
 
-  for (const res of resolutions) {
+  for (let i = 0; i < resolutions.length; i++) {
+    const res = resolutions[i];
+    if (!res) {
+      throw new Error("The resolution doesn't exist");
+    }
     await new Promise((resolve, reject) => {
       ffmpeg(input_path)
         .output(path.join(fileDir, `${res.name}.m3u8`))
@@ -51,7 +59,12 @@ const generateHLSOutput = async ({
         .audioBitrate(res.audioBitrate)
         .format("hls")
         .outputOptions(["-hls_time 6", "-hls_playlist_type vod"])
-        .on("end", () => resolve(null))
+        .on("end", () => {
+          // e.g. after 360p → 25%, 480p → 50%, 720p → 75%, 1080p → 95%
+          const percent = Math.round(((i + 1) / resolutions.length) * 95);
+          onProgress?.(percent);
+          resolve(null);
+        })
         .on("error", reject)
         .run();
     });
@@ -61,7 +74,10 @@ const generateHLSOutput = async ({
     const readStream = fs.createReadStream("./src/public/masterm3u8demo.txt");
     const writeStream = fs.createWriteStream(`${fileDir}/master.m3u8`);
     readStream.pipe(writeStream);
-    writeStream.on("finish", resolve);
+    writeStream.on("finish", () => {
+      onProgress?.(100); // master playlist written → truly done
+      resolve(null);
+    });
     writeStream.on("error", reject);
   });
 
