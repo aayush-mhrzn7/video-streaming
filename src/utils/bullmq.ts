@@ -7,12 +7,10 @@ export default class BullMQService {
   private worker: Worker;
   readonly queue_name: string;
   constructor(queue_name: string) {
-    console.log("BullMQ Service is active");
+    console.log(`Bullmq Service ${queue_name} is active`);
     const connection = { host: "localhost", port: 6379 };
-
     this.queue_name = queue_name;
     this.queue = new Queue(queue_name, { connection });
-
     this.worker = new Worker(
       queue_name,
       async (job: Job) => {
@@ -117,5 +115,5 @@ export default class BullMQService {
 }
 
 const bullMqService = new BullMQService("video-processing");
-
+const deadQueueService = new BullMQService("failed-videos");
 export { bullMqService };

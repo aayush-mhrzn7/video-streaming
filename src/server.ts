@@ -20,7 +20,15 @@ app.get("/upload", (_, res) => {
 });
 app.post("/upload", upload.single("file"), async (req, res) => {
   const file = req.file;
-  const client_id = 0;
+app.post("/upload", upload.single("file"), async (req, res) => {
+  const file = req.file;
+  const client_id = req.headers['x-client-id'] || req.query.client_id;
+  if (!client_id) {
+    return res.status(400).json({ message: "client_id is required" });
+  }
+  if (!file) {
+    return res.json({ message: "File is required" });
+  }
   if (!file) {
     return res.json({ message: "File is required" });
   }
