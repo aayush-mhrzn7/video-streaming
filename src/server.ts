@@ -20,11 +20,12 @@ app.get("/upload", (_, res) => {
 });
 app.post("/upload", upload.single("file"), async (req, res) => {
   const file = req.file;
+  const client_id = 0;
   if (!file) {
     return res.json({ message: "File is required" });
   }
-
-  bullMqService.addToQueue({ file_location: file.path });
+  const job = await bullMqService.addToQueue({ file_location: file.path });
+  bullMqService.getJobProgress(job.id as string, client_id);
   res.send({
     message: "job has been added to the queue",
   });

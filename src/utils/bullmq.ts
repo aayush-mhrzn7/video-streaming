@@ -6,7 +6,6 @@ export default class BullMQService {
   private queue: Queue;
   private worker: Worker;
   readonly queue_name: string;
-
   constructor(queue_name: string) {
     console.log("BullMQ Service is active");
     const connection = { host: "localhost", port: 6379 };
@@ -25,25 +24,13 @@ export default class BullMQService {
             await job.updateProgress(progress);
           },
         });
-
-        await job.updateProgress(100);
       },
       {
         connection,
         concurrency: 4,
       },
     );
-    this.worker.on("progress", (job, progress) => {
-      console.log(`Job ${job.id} progress: ${progress}%`);
-      websocketService.getClients().forEach((client) => {
-        websocketService.sendMessage(client, {
-          type: "progress",
-          payload: {
-            progress: progress,
-          },
-        });
-      });
-    });
+
     this.worker.on("failed", (job, err) => {
       if (job) {
         console.log(
@@ -71,11 +58,19 @@ export default class BullMQService {
     });
   }
 
-  async getJobProgress(job_id: string) {
-    const job = await this.queue.getJob(job_id);
-    console.log(job?.progress);
-    if (!job) return null;
-    return job.progress;
+  async getJobProgress(job_id: string, client_id: number) {
+    const socket = websocketService.getSocket(client_id);
+    this.worker.on("progress", (job, progress) => {
+      console.log(`Job ${job.id} progress: ${progress}%`);
+      if (job_id === job.id) {
+        websocketService.sendMessage(socket, {
+          type: "message",
+          payload: {
+            progress: progress,
+          },
+        });
+      }
+    });
   }
 }
 
