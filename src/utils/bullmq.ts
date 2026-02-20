@@ -60,6 +60,10 @@ export default class BullMQService {
 
   async getJobProgress(job_id: string, client_id: number) {
     const socket = websocketService.getSocket(client_id);
+    if (!socket) {
+      console.warn(`No socket found for client_id: ${client_id}`);
+      return;
+    }
 
     const progressHandler = (job: Job, progress: any) => {
       if (job_id === job.id && socket) {
@@ -75,7 +79,7 @@ export default class BullMQService {
       this.worker.off("progress", progressHandler);
       this.worker.off("completed", completedHandler);
       this.worker.off("failed", failedHandler);
-      socket.off("close", cleanup);
+      socket?.off("close", cleanup);
     };
 
     const completedHandler = (job: Job) => {
@@ -91,18 +95,24 @@ export default class BullMQService {
     };
 
     const job = await this.queue.getJob(job_id);
-    if (job) {
-      const currentProgress = job.progress;
+    if (!job) {
+      console.log("error: job not found");
       websocketService.sendMessage(socket, {
-        type: "message",
-        payload: { progress: currentProgress },
+        type: "error",
+        payload: { message: `Job ${job_id} not found` },
       });
+      return;
     }
-
     this.worker.on("progress", progressHandler);
     this.worker.on("completed", completedHandler);
     this.worker.on("failed", failedHandler);
-    socket.on("close", cleanup);
+    socket?.on("close", cleanup);
+
+    const currentProgress = job.progress;
+    websocketService.sendMessage(socket, {
+      type: "message",
+      payload: { progress: currentProgress },
+    });
   }
 }
 
