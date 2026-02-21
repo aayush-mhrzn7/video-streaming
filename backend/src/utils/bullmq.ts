@@ -43,7 +43,6 @@ export default class BullMQService {
       console.log(`Job ${job.id} completed`);
     });
   }
-
   addToQueue(data: any) {
     return this.queue.add(`${this.queue_name}-job`, data, {
       removeOnComplete: true,
@@ -54,6 +53,9 @@ export default class BullMQService {
         delay: 1000,
       },
     });
+  }
+  async getJobs() {
+    return await this.queue.getActive();
   }
 
   async getJobProgress(job_id: string, client_id: number) {
