@@ -58,9 +58,8 @@ const generateHLSOutput = async ({
         .audioCodec("aac")
         .audioBitrate(res.audioBitrate)
         .format("hls")
-        .outputOptions(["-hls_time 6", "-hls_playlist_type vod"])
+        .outputOptions(["-hls_time 6", "-threads 2", "-hls_playlist_type vod"])
         .on("end", () => {
-          // e.g. after 360p → 25%, 480p → 50%, 720p → 75%, 1080p → 95%
           const percent = Math.round(((i + 1) / resolutions.length) * 95);
           onProgress?.(percent);
           resolve(null);
@@ -75,13 +74,24 @@ const generateHLSOutput = async ({
     const writeStream = fs.createWriteStream(`${fileDir}/master.m3u8`);
     readStream.pipe(writeStream);
     writeStream.on("finish", () => {
-      onProgress?.(100); // master playlist written → truly done
+      onProgress?.(100);
       resolve(null);
     });
     writeStream.on("error", reject);
   });
 
   console.log("HLS Generation Completed");
+
+  fs.unlink(input_path, (error) => {
+    if (error) {
+      console.log(
+        "Error with deleting the file with id " + input_path,
+        +": ",
+        error.message,
+      );
+    }
+  });
+  console.log("Deleted the uploaded file");
 };
 
 export default generateHLSOutput;

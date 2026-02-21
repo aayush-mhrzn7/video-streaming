@@ -25,7 +25,7 @@ export default class BullMQService {
       },
       {
         connection,
-        concurrency: 4,
+        concurrency: 1,
       },
     );
 

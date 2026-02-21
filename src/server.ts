@@ -20,10 +20,10 @@ app.get("/upload", (_, res) => {
 });
 app.post("/upload", upload.single("file"), async (req, res) => {
   const file = req.file;
-  const client_id = req.headers["x-client-id"] || req.query.client_id;
-  if (!client_id) {
-    return res.status(400).json({ message: "client_id is required" });
-  }
+  // const client_id = req.headers["x-client-id"] || req.query.client_id;
+  // if (!client_id) {
+  //   return res.status(400).json({ message: "client_id is required" });
+  // }
   if (!file) {
     return res.json({ message: "File is required" });
   }
@@ -34,7 +34,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   if (!job.id) {
     return res.status(500).json({ message: "failed to create a job" });
   }
-  bullMqService.getJobProgress(job.id as string, client_id).catch((err) => {
+  bullMqService.getJobProgress(job.id as string, 0).catch((err) => {
     console.log(err, "Failed to track the job progress");
   });
   res.send({
