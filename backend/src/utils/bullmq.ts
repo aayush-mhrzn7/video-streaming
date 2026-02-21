@@ -21,9 +21,7 @@ export default class BullMQService {
       queue_name,
       async (job: Job) => {
         const { file_location } = job.data;
-
-        await job.updateProgress(0);
-
+        throw new Error("temporary shutdown");
         await generateHLSOutput({
           input_path: file_location,
           onProgress: async (progress) => {
@@ -44,7 +42,7 @@ export default class BullMQService {
         await generateHLSOutput({
           input_path: data.file_location,
           onProgress: async (percent) => {
-            job.updateProgress(percent);
+            await job.updateProgress(percent);
           },
         });
       },
@@ -106,41 +104,122 @@ export default class BullMQService {
       return;
     }
     const progressHandler = (job: Job, progress: any) => {
-      if (job_id === job.id && socket) {
+      console.log("JOB", job);
+      const original_id = job?.data?.originalJobId ?? job.id;
+      if (job_id === original_id && socket) {
         websocketService.sendMessage(socket, {
           type: "message",
-          payload: { progress },
+          payload: {
+            progress,
+            source: job?.data?.originalJobId ? "Retry Queue" : "Main Queue",
+          },
         });
+      }
+    };
+    const failureHandler = (job: Job | undefined, error: Error) => {
+      if (!job) return;
+      const original_id = job?.data?.originalJobId ?? job.id;
+      if (job_id === original_id && socket) {
+        websocketService.sendMessage(socket, {
+          type: "error",
+          payload: {
+            message: `Job failed: ${error.message}`,
+            attempts: job.attemptsMade,
+            willRetry: job.attemptsMade < (job.opts.attempts || 1),
+            movedToDLQ: job.attemptsMade >= (job.opts.attempts || 1),
+          },
+        });
+        if (job.attemptsMade >= (job.opts.attempts || 1)) {
+          websocketService.sendMessage(socket, {
+            type: "message",
+            payload: {
+              progress: 0,
+              source: "Moving to DLQ",
+              message: `Job moved to Dead Letter Queue for retry`,
+            },
+          });
+        }
       }
     };
     const cleanup = () => {
       this.worker.off("progress", progressHandler);
       this.worker.off("completed", completedHandler);
-      this.worker.off("failed", failedHandler);
+      this.worker.off("failed", failureHandler);
+      this.dlqWorker.off("progress", progressHandler);
+      this.dlqWorker.off("completed", completedHandler);
+      this.dlqWorker.off("failed", failureHandler);
       socket?.off("close", cleanup);
     };
     const completedHandler = (job: Job) => {
-      if (job.id === job_id) cleanup();
+      const original_id = job?.data?.originalJobId ?? job.id;
+      if (original_id === job_id) {
+        websocketService.sendMessage(socket, {
+          type: "message",
+          payload: {
+            progress: 100,
+            source: job?.data?.originalJobId ? "Retry Queue" : "Main Queue",
+            message: "Job completed successfully",
+          },
+        });
+        cleanup();
+      }
     };
-    const failedHandler = (job: Job | undefined) => {
-      if (job?.id === job_id) cleanup();
+
+    const failedHandler = (job: Job | undefined, error: Error) => {
+      if (!job) return;
+      const original_id = job?.data?.originalJobId ?? job.id;
+      if (original_id === job_id) {
+        failureHandler(job, error);
+      }
     };
-    const job = await this.queue.getJob(job_id);
+    let job = await this.queue.getJob(job_id);
+    let isInDLQ = false;
+
+    if (!job) {
+      const dlqJobs = await this.dlqQueue.getJobs([
+        "waiting",
+        "active",
+        "delayed",
+        "failed",
+      ]);
+
+      job = dlqJobs.find((j) => j.data.originalJobId === job_id);
+      isInDLQ = !!job;
+    }
     if (!job) {
       websocketService.sendMessage(socket, {
         type: "error",
-        payload: { message: `Job ${job_id} not found` },
+        payload: { message: `Job ${job_id} not found in any queue` },
       });
       return;
     }
     this.worker.on("progress", progressHandler);
     this.worker.on("completed", completedHandler);
     this.worker.on("failed", failedHandler);
+    this.dlqWorker.on("progress", progressHandler);
+    this.dlqWorker.on("completed", completedHandler);
+    this.dlqWorker.on("failed", failedHandler);
     socket?.on("close", cleanup);
+
     websocketService.sendMessage(socket, {
       type: "message",
-      payload: { progress: job.progress },
+      payload: {
+        progress: job.progress,
+        source: isInDLQ ? "Dead Letter Queue" : "Main Queue",
+        status: await job.getState(),
+        attempts: job.attemptsMade,
+      },
     });
+
+    if (job.failedReason) {
+      websocketService.sendMessage(socket, {
+        type: "error",
+        payload: {
+          message: `Job failed: ${job.failedReason}`,
+          attempts: job.attemptsMade,
+        },
+      });
+    }
   }
 }
 
