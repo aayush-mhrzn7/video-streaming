@@ -44,30 +44,37 @@ const generateHLSOutput = async ({
     },
   ];
 
-  for (let i = 0; i < resolutions.length; i++) {
-    const res = resolutions[i];
-    if (!res) {
-      throw new Error("The resolution doesn't exist");
-    }
-    await new Promise((resolve, reject) => {
-      ffmpeg(input_path)
-        .output(path.join(fileDir, `${res.name}.m3u8`))
-        .videoCodec("libx264")
-        .size(res.size)
-        .videoBitrate(res.videoBitrate)
-        .audioCodec("aac")
-        .audioBitrate(res.audioBitrate)
-        .format("hls")
-        .outputOptions(["-hls_time 6", "-threads 2", "-hls_playlist_type vod"])
-        .on("end", () => {
-          const percent = Math.round(((i + 1) / resolutions.length) * 95);
-          onProgress?.(percent);
-          resolve(null);
-        })
-        .on("error", reject)
-        .run();
-    });
-  }
+  await Promise.all(
+    resolutions.map((res, index) => {
+      if (!res) {
+        throw new Error("The resolution doesn't exist");
+      }
+
+      return new Promise<void>((resolve, reject) => {
+        ffmpeg(input_path)
+          .output(path.join(fileDir, `${res.name}.m3u8`))
+          .videoCodec("libx264")
+          .size(res.size)
+          .videoBitrate(res.videoBitrate)
+          .audioCodec("aac")
+          .audioBitrate(res.audioBitrate)
+          .format("hls")
+          .outputOptions([
+            "-preset veryfast",
+            "-hls_time 6",
+            "-threads 2",
+            "-hls_playlist_type vod",
+          ])
+          .on("end", () => {
+            const percent = Math.round(((index + 1) / resolutions.length) * 95);
+            onProgress?.(percent);
+            resolve();
+          })
+          .on("error", reject)
+          .run();
+      });
+    }),
+  );
 
   await new Promise((resolve, reject) => {
     const readStream = fs.createReadStream("./src/public/masterm3u8demo.txt");
