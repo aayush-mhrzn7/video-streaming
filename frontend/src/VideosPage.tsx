@@ -56,38 +56,21 @@ export default function VideosPage() {
   const fetchVideos = async () => {
     try {
       setLoading(true);
-      const clientId = getClientId();
 
-      if (!clientId) {
-        setVideos([]);
-        return;
-      }
+      const response = await axios.get("http://localhost:4000/videos");
 
-      const response = await axios.get("http://localhost:4000/active-jobs", {
-        params: { clientId },
-      });
-
-      const transformedVideos: Video[] = response.data.jobs.map((job: any) => ({
-        id: job.id,
-        name: `Video ${job.id}`,
+      const transformedVideos: Video[] = response.data.videos.map((v: any) => ({
+        id: v.id,
+        name: v.name,
         duration: "00:00",
-        size: "0 MB",
-        status:
-          job.state === "completed"
-            ? "ready"
-            : job.state === "failed"
-              ? "failed"
-              : "processing",
-        createdAt: new Date().toISOString(),
+        size: "—",
+        status: "ready",
+        createdAt: v.createdAt,
       }));
 
       setVideos(transformedVideos);
     } catch (error) {
-      console.error({
-        title: "Error",
-        description: "Failed to fetch videos",
-        variant: "destructive",
-      });
+      console.error("Failed to fetch videos");
     } finally {
       setLoading(false);
     }

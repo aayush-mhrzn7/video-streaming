@@ -6,6 +6,7 @@ import upload from "./utils/multer.js";
 import { bullMqService } from "./utils/bullmq.js";
 import { websocketService } from "./utils/ws.js";
 import cors from "cors";
+import fs from "fs/promises";
 
 const userJobsMap = new Map<string, string[]>(); // Changed to string keys
 const app = express();
@@ -27,8 +28,8 @@ app.get("/upload", (_, res) => {
 
 app.post("/upload", upload.single("file"), async (req, res) => {
   const file = req.file;
-  const client_id = req.body.clientId; // Get clientId from request body
-
+  const client_id = req.body.clientId;
+  console.log(client_id, file);
   if (!file) {
     return res.status(400).json({ message: "File is required" });
   }
@@ -36,20 +37,14 @@ app.post("/upload", upload.single("file"), async (req, res) => {
   if (!client_id) {
     return res.status(400).json({ message: "Client ID is required" });
   }
-
   try {
     const job = await bullMqService.addToQueue({ file_location: file.path });
-
     if (!job.id) {
       return res.status(500).json({ message: "failed to create a job" });
     }
-
-    // Store job for this client
     const jobs = userJobsMap.get(client_id) ?? [];
     jobs.push(String(job.id));
     userJobsMap.set(client_id, jobs);
-
-    // Start realtime tracking
     bullMqService.getJobProgress(String(job.id), client_id);
 
     res.json({
@@ -90,6 +85,52 @@ app.get("/active-jobs", async (req, res) => {
   } catch (error) {
     console.error("Error fetching jobs:", error);
     res.status(500).json({ message: "Error fetching jobs" });
+  }
+});
+app.delete("/videos/:id", async (req, res) => {
+  try {
+    const folder = path.join(__dirname, "./public/hls_output", req.params.id);
+
+    await fs.rm(folder, { recursive: true, force: true });
+
+    res.json({ message: "Video deleted" });
+  } catch {
+    res.status(500).json({ message: "Delete failed" });
+  }
+});
+app.get("/videos", async (req, res) => {
+  try {
+    const hlsDir = path.join(__dirname, "./public/hls_output");
+
+    const folders = await fs.readdir(hlsDir, { withFileTypes: true });
+
+    const videos = await Promise.all(
+      folders
+        .filter((f) => f.isDirectory())
+        .map(async (folder) => {
+          const masterPath = path.join(hlsDir, folder.name, "master.m3u8");
+
+          try {
+            await fs.access(masterPath);
+
+            return {
+              id: folder.name,
+              name: `Video ${folder.name}`,
+              status: "ready",
+              createdAt: new Date().toISOString(),
+            };
+          } catch {
+            return null;
+          }
+        }),
+    );
+
+    res.json({
+      videos: videos.filter(Boolean),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to read videos" });
   }
 });
 

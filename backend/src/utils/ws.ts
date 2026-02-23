@@ -78,10 +78,8 @@ class WebSocketService {
       return false;
     }
   }
-
-  // FIXED: Return null instead of throwing error
   getSocket(client_id: number): WebSocket | null {
-    const socket = this.clientsMap.get(client_id);
+    const socket = this.clientsMap.get(Number(client_id));
     if (!socket) {
       console.warn(
         `Cannot locate socket with ID ${client_id}. Available clients: ${Array.from(this.clientsMap.keys()).join(", ") || "none"}`,
@@ -89,7 +87,6 @@ class WebSocketService {
       return null; // Return null instead of throwing
     }
 
-    // Check if socket is still open
     if (socket.readyState !== WebSocket.OPEN) {
       console.warn(
         `Socket for client ${client_id} exists but is not open (state: ${socket.readyState})`,
@@ -100,13 +97,11 @@ class WebSocketService {
     return socket;
   }
 
-  // Check if client is connected
   isClientConnected(client_id: number): boolean {
     const socket = this.clientsMap.get(client_id);
     return socket ? socket.readyState === WebSocket.OPEN : false;
   }
 
-  // Get all connected client IDs
   getAllClients(): any[] {
     return Array.from(this.clientsMap.keys());
   }
@@ -114,6 +109,5 @@ class WebSocketService {
 
 export default WebSocketService;
 
-// Create the service - this will start the WebSocket server
 const websocketService = new WebSocketService();
 export { websocketService };

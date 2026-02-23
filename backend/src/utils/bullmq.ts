@@ -21,7 +21,7 @@ export default class BullMQService {
       queue_name,
       async (job: Job) => {
         const { file_location } = job.data;
-        throw new Error("temporary shutdown");
+
         await generateHLSOutput({
           input_path: file_location,
           onProgress: async (progress) => {
