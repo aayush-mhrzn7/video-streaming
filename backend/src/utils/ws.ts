@@ -8,7 +8,7 @@ interface WSMessage {
 class WebSocketService {
   readonly wss: Server;
   private counter: number = 0;
-  private clientsMap: Map<number | string, WebSocket>;
+  private clientsMap: Map<string, WebSocket>;
   constructor(port = Number(process.env.WEBSOCKET_PORT)) {
     if (!port) {
       throw new Error("No PORT for WS");
@@ -18,7 +18,7 @@ class WebSocketService {
     this.wss = new WebSocketServer({ port: port });
     console.log("The Websocket Server is active in PORT", port);
     this.wss.on("connection", (socket: WebSocket) => {
-      const client_id = this.counter++;
+      const client_id = String(this.counter++);
       this.clientsMap.set(client_id, socket);
 
       socket.send(
@@ -49,7 +49,7 @@ class WebSocketService {
       socket.send(JSON.stringify(data));
     }
   }
-  getSocket(client_id: number): WebSocket {
+  getSocket(client_id: string): WebSocket {
     const socket = this.clientsMap.get(client_id);
     if (!socket) {
       throw new Error("Cannot Locate Socket with the id" + ` ${client_id}`);

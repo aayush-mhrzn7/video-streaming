@@ -99,7 +99,7 @@ export default class BullMQService {
   async getJobs() {
     return await this.queue.getActive();
   }
-  async getJobProgress(job_id: string, client_id: number) {
+  async getJobProgress(job_id: string, client_id: string) {
     const socket = websocketService.getSocket(client_id);
     if (!socket) {
       console.warn(`No socket found for client_id: ${client_id}`);
