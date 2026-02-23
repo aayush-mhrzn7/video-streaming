@@ -7,16 +7,21 @@ export default class BullMQService {
   private worker: Worker;
   private dlqQueue: Queue;
   private dlqWorker: Worker;
+  private activeListeners: Set<string> = new Set();
   readonly queue_name: string;
   readonly dlq_queue_name: string;
 
   constructor(queue_name: string, dlq_queue_name: string) {
     console.log(`BullMQ Service ${queue_name} is active`);
-    const connection = { host: "localhost", port: 6379 };
+    const connection = {
+      host: process.env.REDIS_HOST || "localhost",
+      port: Number(process.env.REDIS_PORT) || 6379,
+    };
     this.queue_name = queue_name;
     this.dlq_queue_name = dlq_queue_name;
     this.queue = new Queue(queue_name, { connection });
     this.dlqQueue = new Queue(dlq_queue_name, { connection });
+
     this.worker = new Worker(
       queue_name,
       async (job: Job) => {
@@ -29,23 +34,25 @@ export default class BullMQService {
           },
         });
       },
-      { connection, concurrency: 2 },
+      { connection, concurrency: Number(process.env.WORKER_CONCURRENCY) || 2 },
     );
+
     this.dlqWorker = new Worker(
       dlq_queue_name,
       async (job: Job) => {
         console.log(
           `DLQ processing job ${job.id}... attempt ${job.attemptsMade}`,
         );
-        const { data } = job.data;
+        const { data, originalJobId } = job.data;
         await generateHLSOutput({
           input_path: data.file_location,
           onProgress: async (percent) => {
-            job.updateProgress(percent);
+            await job.updateProgress(percent);
+            this.worker.emit("progress", { id: originalJobId } as any, percent);
           },
         });
       },
-      { connection, concurrency: 1 },
+      { connection, concurrency: Number(process.env.DLQ_CONCURRENCY) || 1 },
     );
 
     this.worker.on("failed", async (job, err) => {
@@ -75,16 +82,20 @@ export default class BullMQService {
         console.log(`Job ${job.id} pushed to DLQ`);
       }
     });
+
     this.worker.on("completed", (job) => {
       console.log(`Job ${job.id} completed`);
     });
+
     this.dlqWorker.on("failed", (job, err) => {
       console.error(`DLQ job ${job?.id} failed: ${err.message}`);
     });
+
     this.dlqWorker.on("completed", (job) => {
       console.log(`DLQ job ${job.id} processed`);
     });
   }
+
   addToQueue(data: any) {
     return this.queue.add(`${this.queue_name}-job`, data, {
       removeOnComplete: true,
@@ -93,48 +104,70 @@ export default class BullMQService {
       backoff: { type: "fixed", delay: 1000 },
     });
   }
+
   async getJobs() {
     return await this.queue.getActive();
   }
+
   async getJobProgress(job_id: string, client_id: string) {
-    const socket = websocketService.getSocket(client_id);
-    if (!socket) {
+    if (this.activeListeners.has(job_id)) return;
+    this.activeListeners.add(job_id);
+
+    let socket: ReturnType<typeof websocketService.getSocket>;
+    try {
+      socket = websocketService.getSocket(client_id);
+    } catch {
       console.warn(`No socket found for client_id: ${client_id}`);
+      this.activeListeners.delete(job_id);
       return;
     }
-    const progressHandler = (job: Job, progress: any) => {
-      if (job_id === job.id && socket) {
-        websocketService.sendMessage(socket, {
-          type: "message",
-          payload: { progress, job_id: job.id },
-        });
-      }
-    };
+
+    const job = await this.queue.getJob(job_id);
+    if (!job) {
+      websocketService.sendMessageById(client_id, {
+        type: "error",
+        payload: { message: `Job ${job_id} not found`, job_id },
+      });
+      this.activeListeners.delete(job_id);
+      return;
+    }
+
     const cleanup = () => {
+      this.activeListeners.delete(job_id);
       this.worker.off("progress", progressHandler);
       this.worker.off("completed", completedHandler);
       this.worker.off("failed", failedHandler);
-      socket?.off("close", cleanup);
+      socket.off("close", cleanup);
     };
-    const completedHandler = (job: Job) => {
-      if (job.id === job_id) cleanup();
-    };
-    const failedHandler = (job: Job | undefined) => {
-      if (job?.id === job_id) cleanup();
-    };
-    const job = await this.queue.getJob(job_id);
-    if (!job) {
-      websocketService.sendMessage(socket, {
-        type: "error",
-        payload: { message: `Job ${job_id} not found` },
+
+    const progressHandler = (job: Job, progress: any) => {
+      if (job.id !== job_id) return;
+      websocketService.sendMessageById(client_id, {
+        type: "message",
+        payload: { progress, job_id: job.id },
       });
-      return;
-    }
+    };
+
+    const completedHandler = (job: Job) => {
+      if (job.id !== job_id) return;
+      cleanup();
+    };
+
+    const failedHandler = (job: Job | undefined, err: Error) => {
+      if (job?.id !== job_id) return;
+      websocketService.sendMessageById(client_id, {
+        type: "error",
+        payload: { message: err.message, job_id },
+      });
+      cleanup();
+    };
+
     this.worker.on("progress", progressHandler);
     this.worker.on("completed", completedHandler);
     this.worker.on("failed", failedHandler);
-    socket?.on("close", cleanup);
-    websocketService.sendMessage(socket, {
+    socket.on("close", cleanup);
+
+    websocketService.sendMessageById(client_id, {
       type: "message",
       payload: { progress: job.progress, job_id: job.id },
     });

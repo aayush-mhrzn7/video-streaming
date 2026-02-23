@@ -24,7 +24,7 @@ app.get("/upload", (_, res) => {
 
 app.post("/upload", upload.single("file"), async (req, res) => {
   const file = req.file;
-  const client_id = req.query.client_id as string;
+  const client_id = req.body.client_id as string;
   if (!client_id) {
     return res.status(400).json({ message: "Client ID  is required" });
   }
