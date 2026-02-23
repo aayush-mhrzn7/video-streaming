@@ -109,10 +109,9 @@ export default function UploadPage() {
         throw new Error(response.data.message);
       }
     } catch (error) {
-      console.error(
-        "Upload Failed:",
-        error instanceof Error ? error.message : "Failed to upload file",
-      );
+      let errorMessage = "Failed to upload file";
+      if (error instanceof Error) errorMessage = error.message;
+      console.error("Upload Failed:", errorMessage);
     } finally {
       setUploading(false);
     }

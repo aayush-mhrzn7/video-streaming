@@ -31,6 +31,12 @@ interface Video {
   createdAt: string;
 }
 
+function toVideo(v: { id: string; name: string; status?: string; createdAt: string }): Video {
+  let status: Video["status"] = "ready";
+  if (v.status === "processing" || v.status === "failed") status = v.status;
+  return { id: v.id, name: v.name, status, createdAt: v.createdAt };
+}
+
 function VideoPlayer({
   video,
   onPlay,
@@ -129,12 +135,7 @@ export default function VideosPage() {
     try {
       setLoading(true);
       const response = await axios.get("http://localhost:4000/videos");
-      const transformed: Video[] = response.data.videos.map((v: any) => ({
-        id: v.id,
-        name: v.name,
-        status: v.status ?? "ready",
-        createdAt: v.createdAt,
-      }));
+      const transformed: Video[] = response.data.videos.map(toVideo);
       setVideos(transformed);
     } catch {
       console.error("Failed to fetch videos");

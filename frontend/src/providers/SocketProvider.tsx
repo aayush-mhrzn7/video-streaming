@@ -21,7 +21,6 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     if (socketInstance) {
-      setSocket(socketInstance);
       return;
     }
 
@@ -36,9 +35,9 @@ export const SocketProvider = ({ children }: { children: React.ReactNode }) => {
     ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
-
-        if (data.payload?.client_id !== undefined) {
-          setClientId(data.payload.client_id);
+        const payload = data.payload;
+        if (payload != null && payload.client_id !== undefined) {
+          setClientId(payload.client_id);
         }
       } catch {}
     };

@@ -17,6 +17,7 @@ const useSocket = () => {
   );
   const attemptsRef = useRef(0);
   const MAX_ATTEMPTS = 10;
+  const connectRef = useRef<() => void>(null!);
 
   const connect = useCallback((): void => {
     if (
@@ -40,10 +41,13 @@ const useSocket = () => {
     ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
-        if (data.type === "connection_ack" && data.payload?.client_id) {
-          const id = String(data.payload.client_id);
-          localStorage.setItem(CLIENT_ID_KEY, id);
-          setClientId(id);
+        if (data.type === "connection_ack") {
+          const payload = data.payload;
+          if (payload != null && payload.client_id) {
+            const id = String(payload.client_id);
+            localStorage.setItem(CLIENT_ID_KEY, id);
+            setClientId(id);
+          }
         }
         messageListeners.forEach((listener) => listener(data));
       } catch {
@@ -65,12 +69,14 @@ const useSocket = () => {
       if (attemptsRef.current < MAX_ATTEMPTS) {
         const delay = Math.min(1000 * 2 ** attemptsRef.current, 30000);
         attemptsRef.current++;
-        reconnectTimer = setTimeout(connect, delay);
+        reconnectTimer = setTimeout(() => connectRef.current(), delay);
       }
     };
 
     ws.onerror = () => ws.close();
   }, []);
+
+  connectRef.current = connect;
 
   useEffect(() => {
     if (
