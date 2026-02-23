@@ -33,7 +33,7 @@ class WebSocketService {
       socket.on("message", (message) => {
         try {
           const data: WSMessage = JSON.parse(message.toString());
-          console.log(data);
+          console.log("Client send this", data);
         } catch (error) {
           console.log("Something Failed When Getting Data From Client");
         }

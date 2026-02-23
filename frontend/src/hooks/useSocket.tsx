@@ -5,7 +5,7 @@ const useSocket = () => {
   useEffect(() => {
     const webSocket = new WebSocket("ws://localhost:8000");
     if (!webSocket) {
-      console.log("test here if not init");
+      console.log("The Connection doesn't exits");
     }
     setSocket(webSocket);
     return () => {

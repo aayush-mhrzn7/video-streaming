@@ -21,9 +21,7 @@ export default class BullMQService {
       queue_name,
       async (job: Job) => {
         const { file_location } = job.data;
-
         await job.updateProgress(0);
-
         await generateHLSOutput({
           input_path: file_location,
           onProgress: async (progress) => {
@@ -40,7 +38,6 @@ export default class BullMQService {
           `DLQ processing job ${job.id}... attempt ${job.attemptsMade}`,
         );
         const { data } = job.data;
-        console.log(data.file_location);
         await generateHLSOutput({
           input_path: data.file_location,
           onProgress: async (percent) => {
@@ -109,7 +106,7 @@ export default class BullMQService {
       if (job_id === job.id && socket) {
         websocketService.sendMessage(socket, {
           type: "message",
-          payload: { progress },
+          payload: { progress, job_id: job.id },
         });
       }
     };
@@ -139,7 +136,7 @@ export default class BullMQService {
     socket?.on("close", cleanup);
     websocketService.sendMessage(socket, {
       type: "message",
-      payload: { progress: job.progress },
+      payload: { progress: job.progress, job_id: job.id },
     });
   }
 }
